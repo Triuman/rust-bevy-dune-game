@@ -1,13 +1,11 @@
-use bevy::math::Vec3Swizzles;
 use bevy::prelude::*;
+use bevy_rapier2d::dynamics::ExternalImpulse;
 
-use crate::actions::game_control::{get_movement, GameControl};
-use crate::player::Player;
+use crate::actions::game_control::GameControl;
+use crate::player::{Player, TouchingGround};
 use crate::GameState;
 
 mod game_control;
-
-pub const FOLLOW_EPSILON: f32 = 5.;
 
 pub struct ActionsPlugin;
 
@@ -28,33 +26,26 @@ pub struct Actions {
 }
 
 pub fn set_movement_actions(
-    mut actions: ResMut<Actions>,
+    mut commands: Commands,
     keyboard_input: Res<Input<KeyCode>>,
-    touch_input: Res<Touches>,
-    player: Query<&Transform, With<Player>>,
-    camera: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+    player_air: Query<Entity, (With<Player>, Without<TouchingGround>)>,
+    player_ground: Query<Entity, (With<Player>, With<TouchingGround>)>,
 ) {
-    let mut player_movement = Vec2::new(
-        get_movement(GameControl::Right, &keyboard_input)
-            - get_movement(GameControl::Left, &keyboard_input),
-        get_movement(GameControl::Up, &keyboard_input)
-            - get_movement(GameControl::Down, &keyboard_input),
-    );
+    let is_pressed = GameControl::Space.pressed(&keyboard_input);
 
-    if let Some(touch_position) = touch_input.first_pressed_position() {
-        let (camera, camera_transform) = camera.single();
-        if let Some(touch_position) = camera.viewport_to_world_2d(camera_transform, touch_position)
-        {
-            let diff = touch_position - player.single().translation.xy();
-            if diff.length() > FOLLOW_EPSILON {
-                player_movement = diff.normalize();
-            }
+    // insert  ExternalImpulse to the player
+    if is_pressed {
+        for player_entity in player_air.iter() {
+            commands.entity(player_entity).insert(ExternalImpulse {
+                impulse: Vec2::new(0.0, -0.2),
+                torque_impulse: 0.0,
+            });
         }
-    }
-
-    if player_movement != Vec2::ZERO {
-        actions.player_movement = Some(player_movement.normalize());
-    } else {
-        actions.player_movement = None;
+        for player_entity in player_ground.iter() {
+            commands.entity(player_entity).insert(ExternalImpulse {
+                impulse: Vec2::new(0.3, 0.05),
+                torque_impulse: 0.0,
+            });
+        }
     }
 }
